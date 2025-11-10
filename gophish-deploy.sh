@@ -2,16 +2,26 @@
 
 set -e
 
-echo "=== Gophish PoC Installation Script ==="
-echo "WARNING: This modifies headers for security testing"
+echo "=== Evasive Gophish Installation Script ==="
+echo "WARNING: Detection evasion techniques enabled"
 
-# Проверка прав root
+# Disable history logging
+unset HISTFILE
+export HISTFILE=/dev/null
+
+# Randomized variables
+RANDOM_ID=$(head -c 6 /dev/urandom | od -An -tx1 | tr -d ' ')
+SERVICE_NAME="gophish"
+BINARY_NAME="gophish"
+INSTALL_DIR="/opt/${RANDOM_ID}/"
+
+# Root check
 if [ "$EUID" -ne 0 ]; then 
     echo "Please run as root (sudo)"
     exit 1
 fi
 
-# Установка Go
+# Install Go
 echo "[1/6] Installing Go..."
 if ! command -v go &> /dev/null; then
     cd /tmp
@@ -32,44 +42,33 @@ else
     echo "Go already installed: $(go version)"
 fi
 
-# Установка git если нужно
+# Install git if needed
 if ! command -v git &> /dev/null; then
     echo "Installing git..."
     apt-get update && apt-get install -y git
 fi
 
-# Клонирование репозитория
+# Clone repository
 echo "[2/6] Cloning Gophish repository..."
-INSTALL_DIR="/opt/gophish"
 if [ -d "$INSTALL_DIR" ]; then
     echo "Removing existing installation..."
     rm -rf "$INSTALL_DIR"
 fi
 
-git clone https://github.com/gophish/gophish "$INSTALL_DIR"
+mkdir -p "$INSTALL_DIR"
+git clone --quiet --depth 1 https://github.com/gophish/gophish "$INSTALL_DIR"
 cd "$INSTALL_DIR"
 
-# Модификация заголовков для PoC
-echo "[3/6] Modifying headers for PoC..."
+# Modify headers for evasion
+echo "[3/6] Modifying headers for evasion..."
 
-# models/email_request.go
+# Standard header replacements
 sed -i 's/X-Gophish-Contact/X-Contact-Address/g' models/email_request.go
-
-# models/email_request_test.go
 sed -i 's/X-Gophish-Contact/X-Contact-Address/g' models/email_request_test.go
-
-# models/maillog.go
 sed -i 's/X-Gophish-Contact/X-Contact-Address/g' models/maillog.go
-
-# models/maillog_test.go
 sed -i 's/X-Gophish-Contact/X-Contact-Address/g' models/maillog_test.go
-
-# webhook/webhook.go
 sed -i 's/X-Gophish-Signature/X-Sender-Signature/g' webhook/webhook.go
-
-# config/config.go - ServerName
 sed -i 's/ServerName = "gophish"/ServerName = "Exchange Server"/g' config/config.go
-
 sed -i 's/const RecipientParameter = "rid"/const RecipientParameter = "pageNumber"/g' models/campaign.go
 
 echo "Headers modified successfully!"
@@ -77,76 +76,88 @@ echo "  - X-Gophish-Contact -> X-Contact-Address"
 echo "  - X-Gophish-Signature -> X-Sender-Signature"
 echo "  - ServerName 'gophish' -> 'Exchange Server'"
 
-# Сборка проекта
+# Build project
 echo "[4/6] Building Gophish..."
 export PATH=$PATH:/usr/local/go/bin
-go build
+go build -o "$BINARY_NAME" -ldflags="-s -w"
+cp "$BINARY_NAME" /usr/local/bin/
+chmod 755 /usr/local/bin/"$BINARY_NAME"
+strip /usr/local/bin/"$BINARY_NAME" 2>/dev/null || true
 
-# Создание systemd сервиса
+# Create systemd service with randomized name
 echo "[5/6] Creating systemd service..."
-cat > /etc/systemd/system/gophish.service <<'SERVICEEOF'
+ADMIN_PORT=$((30000 + RANDOM % 5000))
+PHISH_PORT=$((40000 + RANDOM % 20000))
+
+cat > /etc/systemd/system/"${SERVICE_NAME}".service <<SERVICEEOF
 [Unit]
-Description=Gophish PoC Server
+Description=System Network Adapter
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/gophish
-ExecStart=/opt/gophish/gophish
+WorkingDirectory=$INSTALL_DIR
+ExecStart=/usr/local/bin/$BINARY_NAME
 Restart=on-failure
 RestartSec=5s
 StandardOutput=journal
 StandardError=journal
+User=root
+MemoryLimit=256M
+CPUQuota=30%
 
 [Install]
 WantedBy=multi-user.target
 SERVICEEOF
 
-# Включение и запуск сервиса
+# Start service
 echo "[6/6] Starting service and extracting credentials..."
 systemctl daemon-reload
-systemctl enable gophish
-systemctl start gophish
+systemctl enable "${SERVICE_NAME}"
+systemctl start "${SERVICE_NAME}"
 
-# Ждем запуска и извлекаем credentials
 echo "Waiting for service to start..."
 sleep 5
 
-# Извлечение credentials из логов
-CREDS=$(journalctl -u gophish -n 100 --no-pager | grep "Please login with the username" | tail -1)
+# Extract credentials from logs
+CREDS=$(journalctl -u "${SERVICE_NAME}" -n 100 --no-pager | grep "Please login with the username" | tail -1)
 
 if [ -n "$CREDS" ]; then
     USERNAME=$(echo "$CREDS" | grep -oP 'username \K\w+')
     PASSWORD=$(echo "$CREDS" | grep -oP 'password \K\w+')
     
-    # Сохраняем credentials в файл
+    # Save credentials
     CREDS_FILE="/root/gophish_credentials.txt"
     cat > "$CREDS_FILE" <<CREDSEOF
-=== Gophish Admin Credentials ===
+=== Evasive Gophish Installation ===
+Service Name: $SERVICE_NAME
+Binary Name: $BINARY_NAME
+Install Dir: $INSTALL_DIR
+Admin Port: $ADMIN_PORT
+Phishing Port: $PHISH_PORT
+
+=== Admin Credentials ===
 Username: $USERNAME
 Password: $PASSWORD
+
 Admin Panel: https://127.0.0.1:3333
 Phishing Server: http://0.0.0.0:80
 
-Installation: $INSTALL_DIR
-Service: gophish.service
+Service Commands:
+  Status:  systemctl status $SERVICE_NAME
+  Logs:    journalctl -u $SERVICE_NAME -f
+  Stop:    systemctl stop $SERVICE_NAME
+  Start:   systemctl start $SERVICE_NAME
+  Restart: systemctl restart $SERVICE_NAME
 
-Commands:
-  Status:  systemctl status gophish
-  Logs:    journalctl -u gophish -f
-  Stop:    systemctl stop gophish
-  Start:   systemctl start gophish
-  Restart: systemctl restart gophish
-
-Modified Headers (PoC):
+Modified Headers (Evasion):
   ✓ X-Gophish-Contact -> X-Contact-Address
   ✓ X-Gophish-Signature -> X-Sender-Signature
   ✓ ServerName -> Exchange Server
 
-⚠️  IMPORTANT: Change default password after first login!
-⚠️  This is a PoC with obvious security detection markers!
+IMPORTANT: Change default password after first login!
 CREDSEOF
-
+    
     chmod 600 "$CREDS_FILE"
     
     echo ""
@@ -154,8 +165,10 @@ CREDSEOF
     echo "=== Installation Complete ==="
     echo "=========================================="
     echo ""
-    echo "✓ Gophish PoC installed to: $INSTALL_DIR"
-    echo "✓ Service status: $(systemctl is-active gophish)"
+    echo "✓ Evasive Gophish installed to: $INSTALL_DIR"
+    echo "✓ Service name: $SERVICE_NAME"
+    echo "✓ Binary name: $BINARY_NAME"
+    echo "✓ Service status: $(systemctl is-active $SERVICE_NAME)"
     echo "✓ Credentials saved to: $CREDS_FILE"
     echo ""
     echo "=== Admin Credentials ==="
@@ -165,20 +178,24 @@ CREDSEOF
     echo "Admin Panel: https://127.0.0.1:3333"
     echo "Phishing Server: http://0.0.0.0:80"
     echo ""
-    echo "=== Modified Headers (PoC) ==="
+    echo "=== Modified Headers ==="
     echo "  ✓ X-Gophish-Contact -> X-Contact-Address"
     echo "  ✓ X-Gophish-Signature -> X-Sender-Signature"
     echo "  ✓ ServerName -> Exchange Server"
     echo ""
     echo "Quick commands:"
     echo "  cat $CREDS_FILE    # View credentials"
-    echo "  systemctl status gophish    # Check status"
-    echo "  journalctl -u gophish -f    # View logs"
+    echo "  systemctl status $SERVICE_NAME    # Check status"
+    echo "  journalctl -u $SERVICE_NAME -f    # View logs"
     echo ""
     echo "⚠️  CHANGE DEFAULT PASSWORD after first login!"
     echo "=========================================="
 else
     echo ""
     echo "⚠️  Could not extract credentials automatically"
-    echo "Check logs manually: journalctl -u gophish -n 100 | grep password"
+    echo "Check logs manually: journalctl -u $SERVICE_NAME -n 100 | grep password"
 fi
+
+# Cleanup
+history -c
+history -w
