@@ -68,13 +68,13 @@ sed -i 's/X-Gophish-Contact/X-Contact-Address/g' models/email_request_test.go
 sed -i 's/X-Gophish-Contact/X-Contact-Address/g' models/maillog.go
 sed -i 's/X-Gophish-Contact/X-Contact-Address/g' models/maillog_test.go
 sed -i 's/X-Gophish-Signature/X-Sender-Signature/g' webhook/webhook.go
-sed -i 's/ServerName = "gophish"/ServerName = "Exchange Server"/g' config/config.go
+sed -i 's/ServerName = "gophish"/ServerName = "IGNORE"/g' config/config.go
 sed -i 's/const RecipientParameter = "rid"/const RecipientParameter = "pageNumber"/g' models/campaign.go
 
 echo "Headers modified successfully!"
 echo "  - X-Gophish-Contact -> X-Contact-Address"
 echo "  - X-Gophish-Signature -> X-Sender-Signature"
-echo "  - ServerName 'gophish' -> 'Exchange Server'"
+echo "  - ServerName 'gophish' -> 'IGNORE'"
 
 # Build project
 echo "[4/6] Building Gophish..."
@@ -153,7 +153,7 @@ Service Commands:
 Modified Headers (Evasion):
   ✓ X-Gophish-Contact -> X-Contact-Address
   ✓ X-Gophish-Signature -> X-Sender-Signature
-  ✓ ServerName -> Exchange Server
+  ✓ ServerName -> IGNORE
 
 IMPORTANT: Change default password after first login!
 CREDSEOF
@@ -181,7 +181,7 @@ CREDSEOF
     echo "=== Modified Headers ==="
     echo "  ✓ X-Gophish-Contact -> X-Contact-Address"
     echo "  ✓ X-Gophish-Signature -> X-Sender-Signature"
-    echo "  ✓ ServerName -> Exchange Server"
+    echo "  ✓ ServerName -> IGNORE"
     echo ""
     echo "Quick commands:"
     echo "  cat $CREDS_FILE    # View credentials"
