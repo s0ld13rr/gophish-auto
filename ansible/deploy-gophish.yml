@@ -1,0 +1,57 @@
+---
+- name: Run remote script and fetch its last output
+  hosts: all
+  become: true
+  vars:
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+    remote_script_path: /root/gophish-deploy.sh   
+    remote_output_path: /root/gophish_credentials.txt
+    local_output_dir: /tmp/ansible_results           
+  tasks:
+    - name: Ensure local output dir exists (on controller)
+      delegate_to: localhost
+      become: false
+      file:
+        path: "{{ local_output_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Copy installer script to remote host
+      copy:
+        src: "../gophish-deploy.sh"   
+        dest: "{{ remote_script_path }}"
+        owner: root
+        group: root
+        mode: '0755'
+      tags: ['deploy']
+
+    - name: Run the installer (capture stdout/stderr to file)
+      block:
+        - name: Execute installer and save combined output
+          shell: "{{ remote_script_path }}"
+          args:
+            executable: /bin/bash
+          register: run_result
+          failed_when: false   
+
+        - name: Ensure output file exists (sanity)
+          stat:
+            path: "{{ remote_output_path }}"
+          register: out_stat
+
+      tags: ['run']
+
+    - name: Fetch output file to controller
+      fetch:
+        src: "{{ remote_output_path }}"
+        dest: "{{ local_output_dir }}/{{ inventory_hostname }}.out"
+        flat: yes
+      when: out_stat.stat.exists
+      tags: ['collect']
+
+    - name: (Optional) Trim remote output file to last 1000 lines to save space
+      shell: "tail -n 1000 {{ remote_output_path }} > {{ remote_output_path }}.tmp && mv {{ remote_output_path }}.tmp {{ remote_output_path }}"
+      args:
+        executable: /bin/bash
+      when: out_stat.stat.exists
+      tags: ['cleanup']
