@@ -14,6 +14,7 @@ RANDOM_ID=$(head -c 6 /dev/urandom | od -An -tx1 | tr -d ' ')
 SERVICE_NAME="gophish"
 BINARY_NAME="gophish"
 INSTALL_DIR="/opt/${RANDOM_ID}/"
+PORT=$((RANDOM % 40000 + 20000))
 
 # Root check
 if [ "$EUID" -ne 0 ]; then 
@@ -75,6 +76,10 @@ echo "Headers modified successfully!"
 echo "  - X-Gophish-Contact -> X-Contact-Address"
 echo "  - X-Gophish-Signature -> X-Sender-Signature"
 echo "  - ServerName 'gophish' -> 'IGNORE'"
+
+# Changing default port
+
+sed -i "s/127.0.0.1:3333/0.0.0.0:${PORT}/g" config.json
 
 # Build project
 echo "[4/6] Building Gophish..."
@@ -140,7 +145,7 @@ Phishing Port: $PHISH_PORT
 Username: $USERNAME
 Password: $PASSWORD
 
-Admin Panel: https://127.0.0.1:3333
+Admin Panel: https://0.0.0.0:$PORT
 Phishing Server: http://0.0.0.0:80
 
 Service Commands:
@@ -175,7 +180,7 @@ CREDSEOF
     echo "Username: $USERNAME"
     echo "Password: $PASSWORD"
     echo ""
-    echo "Admin Panel: https://127.0.0.1:3333"
+    echo "Admin Panel: https://0.0.0.0:$PORT"
     echo "Phishing Server: http://0.0.0.0:80"
     echo ""
     echo "=== Modified Headers ==="
