@@ -27,7 +27,7 @@ echo "[1/6] Installing Go..."
 if ! command -v go &> /dev/null; then
     cd /tmp
     echo "Fetching latest Go version..."
-    GO_VERSION=$(curl -s https://go.dev/VERSION?m=text | head -n1 | sed 's/go//')
+    # GO_VERSION=$(curl -s https://go.dev/VERSION?m=text | head -n1 | sed 's/go//')
     if [ -z "$GO_VERSION" ]; then
         echo "Failed to fetch latest Go version, using fallback 1.21.5"
         GO_VERSION="1.21.5"
