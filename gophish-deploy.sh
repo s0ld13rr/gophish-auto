@@ -26,16 +26,12 @@ fi
 echo "[1/6] Installing Go..."
 if ! command -v go &> /dev/null; then
     cd /tmp
-    echo "Fetching latest Go version..."
-    # GO_VERSION=$(curl -s https://go.dev/VERSION?m=text | head -n1 | sed 's/go//')
     if [ -z "$GO_VERSION" ]; then
         echo "Failed to fetch latest Go version, using fallback 1.21.5"
         GO_VERSION="1.21.5"
     fi
     echo "Installing Go ${GO_VERSION}..."
-    wget https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz
-    rm -rf /usr/local/go
-    tar -C /usr/local -xzf go${GO_VERSION}.linux-amd64.tar.gz
+    apt install -y golang-go
     echo 'export PATH=$PATH:/usr/local/go/bin' >> /etc/profile
     export PATH=$PATH:/usr/local/go/bin
     echo "Go ${GO_VERSION} installed successfully"
